@@ -8,8 +8,8 @@ const path = require('path');
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-// 请替换为你的 Remove.bg API Key
-const REMOVE_BG_API_KEY = process.env.REMOVE_BG_API_KEY || 'YOUR_API_KEY_HERE';
+// Remove.bg API Key
+const REMOVE_BG_API_KEY = process.env.REMOVE_BG_API_KEY || 'AePdC7m1MdfoawBadrba4jwi';
 
 app.use(express.static('public'));
 app.use('/output', express.static('output'));
