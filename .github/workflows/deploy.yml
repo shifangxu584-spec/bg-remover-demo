@@ -8,7 +8,6 @@ on:
 env:
   NODE_VERSION: '20'
   CF_PROJECT_NAME: 'bg-remover-demo'
-  # 强制使用 Node.js 24 以避免弃用警告
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -27,14 +26,12 @@ jobs:
         
     - name: Install dependencies
       run: |
-        # 清理 npm 缓存，避免之前的问题
         npm cache clean --force
         npm ci --no-audit --prefer-offline
         echo "✅ Dependencies installed successfully"
         
     - name: Install Wrangler globally
       run: |
-        # 全局安装 wrangler，避免 npx 问题
         npm install -g wrangler@3
         echo "✅ Wrangler installed globally"
         
@@ -46,15 +43,15 @@ jobs:
     - name: Deploy to Cloudflare Pages
       id: deploy
       run: |
-        # 直接使用 wrangler 命令部署
         wrangler pages deploy . \
           --project-name=${{ env.CF_PROJECT_NAME }} \
           --branch=master \
           --commit-hash="${{ github.sha }}"
       env:
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        REMOVE_BG_API_KEY: ${{ secrets.REMOVEBG_API_KEY }}
+        # 使用现有的 Secrets 名称（有 CLOUDFLARE_ 前缀）
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        REMOVE_BG_API_KEY: ${{ secrets.REMOVE_BG_API_KEY }}
         NODE_ENV: production
         
     - name: Output deployment URL
@@ -62,8 +59,3 @@ jobs:
         echo "🚀 Deployment completed!"
         echo "📱 Your site will be available at:"
         echo "👉 https://${{ env.CF_PROJECT_NAME }}.pages.dev"
-        echo ""
-        echo "🔧 If you need to set up a custom domain:"
-        echo "1. Go to Cloudflare Dashboard"
-        echo "2. Navigate to Pages > bg-remover-demo"
-        echo "3. Click 'Custom domains' to add your domain"
