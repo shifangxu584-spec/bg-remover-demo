@@ -31,11 +31,11 @@ jobs:
       id: deploy
       uses: cloudflare/wrangler-action@v3
       with:
-        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        apiToken: ${{ secrets.CF_API_TOKEN }}  # 使用你现有的 Secret 名称
+        accountId: ${{ secrets.CF_ACCOUNT_ID }}  # 使用你现有的 Secret 名称
         command: pages deploy . --project-name=${{ env.CF_PROJECT_NAME }} --branch=master
       env:
-        REMOVE_BG_API_KEY: ${{ secrets.REMOVE_BG_API_KEY }}
+        REMOVE_BG_API_KEY: ${{ secrets.REMOVEBG_API_KEY }}  # 使用你现有的 Secret 名称
         NODE_ENV: production
         PORT: '3000'
         
