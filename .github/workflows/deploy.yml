@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to Cloudflare
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 env:
   NODE_VERSION: '20'
   CF_PROJECT_NAME: 'bg-remover-demo'
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  WORKER_NAME: 'bg-remover-worker'
 
 jobs:
   deploy:
@@ -24,38 +24,29 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
         
-    - name: Install dependencies
-      run: |
-        npm cache clean --force
-        npm ci --no-audit --prefer-offline
-        echo "✅ Dependencies installed successfully"
+    - name: Install Wrangler
+      run: npm install -g wrangler@3
         
-    - name: Install Wrangler globally
+    - name: Deploy Worker
       run: |
-        npm install -g wrangler@3
-        echo "✅ Wrangler installed globally"
-        
-    - name: Verify Wrangler installation
-      run: |
-        wrangler --version
-        echo "✅ Wrangler is available"
-        
-    - name: Deploy to Cloudflare Pages
-      id: deploy
-      run: |
-        wrangler pages deploy . \
-          --project-name=${{ env.CF_PROJECT_NAME }} \
-          --branch=master \
-          --commit-hash="${{ github.sha }}"
+        cd worker
+        wrangler deploy --name=${{ env.WORKER_NAME }}
       env:
-        # 使用现有的 Secrets 名称（有 CLOUDFLARE_ 前缀）
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         REMOVE_BG_API_KEY: ${{ secrets.REMOVE_BG_API_KEY }}
-        NODE_ENV: production
-        
+
+    - name: Deploy to Cloudflare Pages
+      run: |
+        wrangler pages deploy public \
+          --project-name=${{ env.CF_PROJECT_NAME }} \
+          --branch=master
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
     - name: Output deployment URL
       run: |
-        echo "🚀 Deployment completed!"
-        echo "📱 Your site will be available at:"
-        echo "👉 https://${{ env.CF_PROJECT_NAME }}.pages.dev"
+        echo "🚀 部署完成!"
+        echo "📱 网站: https://${{ env.CF_PROJECT_NAME }}.pages.dev"
+        echo "🔧 Worker: https://${{ env.WORKER_NAME }}.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev"

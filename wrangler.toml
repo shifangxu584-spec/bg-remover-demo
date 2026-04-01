@@ -1,0 +1,7 @@
+name = "bg-remover-worker"
+main = "worker/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]]
+# Remove.bg API key - set in Cloudflare Dashboard or via wrangler secret
+# REMOVE_BG_API_KEY = "your-api-key-here"
