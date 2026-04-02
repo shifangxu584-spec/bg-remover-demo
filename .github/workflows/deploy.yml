@@ -9,24 +9,57 @@ env:
   NODE_VERSION: '20'
   CF_PROJECT_NAME: 'bg-remover-demo'
   WORKER_NAME: 'bg-remover-worker'
+  D1_DB_NAME: 'bg-remover-db'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        
+
     - name: Install Wrangler
       run: npm install -g wrangler@3
-        
+
+    - name: Create D1 Database
+      id: d1
+      run: |
+        DB_ID=$(wrangler d1 create ${{ env.D1_DB_NAME }} --json 2>/dev/null | \
+          python3 -c "import sys,json; print(json.load(sys.stdin).get('uuid',''))" || \
+          python3 -c "import sys,json; d=eval(sys.stdin.read()); print(d.get('uuid',''))")
+        if [ -z "$DB_ID" ]; then
+          # DB might already exist, get its ID
+          echo "DB_ID=${{ secrets.D1_DATABASE_ID }}" >> $GITHUB_OUTPUT
+        else
+          echo "DB_ID=$DB_ID" >> $GITHUB_OUTPUT
+        fi
+        echo "Database ID: $DB_ID"
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    - name: Apply D1 Schema
+      run: |
+        # Update wrangler.toml with actual DB ID
+        sed -i "s/YOUR_D1_DATABASE_ID/${{ steps.d1.outputs.DB_ID }}/" wrangler.toml
+        cat wrangler.toml
+
+        # Apply schema
+        wrangler d1 execute ${{ env.D1_DB_NAME }} \
+          --file=worker/schema.sql \
+          --remote \
+          --yes
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
     - name: Deploy Worker
       run: |
         cd worker
@@ -35,6 +68,8 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         REMOVE_BG_API_KEY: ${{ secrets.REMOVE_BG_API_KEY }}
+        GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
     - name: Deploy to Cloudflare Pages
       run: |

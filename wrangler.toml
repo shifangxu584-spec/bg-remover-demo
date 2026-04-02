@@ -2,6 +2,14 @@ name = "bg-remover-worker"
 main = "worker/index.js"
 compatibility_date = "2024-01-01"
 
-# REMOVE_BG_API_KEY should be set via:
-# 1. Cloudflare Dashboard -> Workers & Pages -> bg-remover-worker -> Settings -> Variables
-# 2. Or run: wrangler secret put REMOVE_BG_API_KEY
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "bg-remover-db"
+database_id = "YOUR_D1_DATABASE_ID"  # 创建后替换
+
+# Google OAuth (set via: wrangler secret put GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)
+# Also configure in GitHub Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+
+[vars]
+# REMOVE_BG_API_KEY should be set via: wrangler secret put REMOVE_BG_API_KEY

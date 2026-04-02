@@ -1,11 +1,6 @@
 /**
- * Cloudflare Worker - bg-remover-demo
- * Routes:
- *   POST /remove-bg   - Remove image background (existing)
- *   GET  /auth/google  - Initiate Google OAuth
- *   GET  /auth/callback - Google OAuth callback
- *   GET  /auth/me      - Get current user
- *   GET  /auth/logout  - Logout
+ * Google OAuth Auth Worker
+ * Routes: /auth/google, /auth/callback, /auth/logout, /auth/me
  */
 
 export default {
@@ -25,7 +20,6 @@ export default {
     }
 
     try {
-      // ---- Auth routes ----
       if (path === '/auth/google') {
         return handleGoogleAuth(url, env);
       }
@@ -39,28 +33,20 @@ export default {
         return handleLogout();
       }
 
-      // ---- Remove-bg route (existing) ----
-      if (path === '/remove-bg' && request.method === 'POST') {
-        return await handleRemoveBg(request, env);
-      }
-
       return new Response('Not Found', { status: 404 });
     } catch (err) {
-      console.error('Worker error:', err);
+      console.error('Auth error:', err);
       return jsonResponse({ error: err.message }, 500);
     }
   }
 };
 
-// ------------------- Auth Handlers -------------------
+// ------------------- Handlers -------------------
 
 function handleGoogleAuth(url, env) {
   const clientId = env.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    return jsonResponse({ error: 'GOOGLE_CLIENT_ID not configured' }, 500);
-  }
   const redirectUri = `${url.origin}/auth/callback`;
-  const state = generateId();
+  const state = generateState();
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -72,16 +58,19 @@ function handleGoogleAuth(url, env) {
     prompt: 'select_account',
   });
 
-  return Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, 302);
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  return Response.redirect(authUrl, 302);
 }
 
 async function handleCallback(request, url, env) {
   const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
   const error = url.searchParams.get('error');
 
   if (error) {
     return jsonResponse({ error: `Google auth error: ${error}` }, 400);
   }
+
   if (!code) {
     return jsonResponse({ error: 'Missing code' }, 400);
   }
@@ -104,7 +93,7 @@ async function handleCallback(request, url, env) {
     return jsonResponse({ error: 'Failed to get access token', detail: tokens }, 400);
   }
 
-  // Get user info from Google
+  // Get user info
   const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
@@ -123,11 +112,12 @@ async function handleCallback(request, url, env) {
       picture = excluded.picture
   `).bind(userId, userInfo.id, userInfo.email, userInfo.name, userInfo.picture || '', now).run();
 
-  // Fetch the user (handles both insert and conflict-update cases)
+  // Get the user (in case of conflict, fetch existing)
+  let user;
   const { results } = await env.DB.prepare(
     'SELECT * FROM users WHERE google_id = ?'
   ).bind(userInfo.id).all();
-  const user = results[0];
+  user = results[0];
 
   // Create session token
   const sessionToken = generateId();
@@ -138,24 +128,23 @@ async function handleCallback(request, url, env) {
     VALUES (?, ?, ?)
   `).bind(sessionToken, user.id, sessionExpiry).run();
 
-  // Return simple HTML that stores token and redirects
-  const userJson = JSON.stringify({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    picture: user.picture,
-  });
-
+  // Return HTML with session token (simple redirect page)
   const html = `<!DOCTYPE html>
 <html>
 <head><title>Login Success</title></head>
 <body>
-<script>
-  localStorage.setItem('session_token', '${sessionToken}');
-  localStorage.setItem('user', ${userJson});
-  window.location.href = '/?logged_in=1';
-</script>
-<p>登录成功，正在跳转...</p>
+  <script>
+    const token = "${sessionToken}";
+    localStorage.setItem('session_token', token);
+    localStorage.setItem('user', JSON.stringify(${JSON.stringify({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      picture: user.picture
+    })}));
+    window.location.href = "/?logged_in=1";
+  </script>
+  <p>登录成功，正在跳转...</p>
 </body>
 </html>`;
 
@@ -186,53 +175,18 @@ async function handleMe(request, env) {
 
 function handleLogout() {
   const html = `<!DOCTYPE html>
-<html><body>
-<script>
-  localStorage.removeItem('session_token');
-  localStorage.removeItem('user');
-  window.location.href = '/?logged_out=1';
-</script>
-</body></html>`;
-  return new Response(html, { headers: { 'Content-Type': 'text/html' } });
-}
-
-// ------------------- Remove-bg Handler (existing) -------------------
-
-async function handleRemoveBg(request, env) {
-  try {
-    const formData = await request.formData();
-    const imageFile = formData.get('image_file');
-
-    if (!imageFile) {
-      return jsonResponse({ error: 'No image file provided' }, 400);
-    }
-
-    const removeBgFormData = new FormData();
-    removeBgFormData.append('image_file', imageFile);
-    removeBgFormData.append('size', 'auto');
-    removeBgFormData.append('format', 'png');
-
-    const response = await fetch('https://api.remove.bg/v1.0/removebg', {
-      method: 'POST',
-      headers: { 'X-Api-Key': env.REMOVE_BG_API_KEY },
-      body: removeBgFormData,
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      return jsonResponse({ error }, response.status);
-    }
-
-    const result = await response.arrayBuffer();
-    return new Response(result, {
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'no-cache',
-      },
-    });
-  } catch (error) {
-    return jsonResponse({ error: error.message }, 500);
-  }
+<html>
+<body>
+  <script>
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user');
+    window.location.href = "/?logged_out=1";
+  </script>
+</body>
+</html>`;
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html' },
+  });
 }
 
 // ------------------- Utils -------------------
@@ -256,4 +210,8 @@ function generateId() {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
   return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateState() {
+  return generateId();
 }
